@@ -1,0 +1,9 @@
+Package: com.local.tabcleaner
+Name: TabCleaner
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: Removes the Shorts and/or upload tabs from the YouTube bottom bar.
+Maintainer: local
+Author: local
+Section: Tweaks
+Depends: mobilesubstrate (>= 0.9.5000), firmware (>= 14.0)

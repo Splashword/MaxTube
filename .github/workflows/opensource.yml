@@ -1,0 +1,293 @@
+name: Build open-source YouTube (no closed-source tweak)
+
+# Builds an IPA using ONLY open-source tweaks, compiled from source.
+# No YTPlus/YTLite, no pre-built .deb downloaded from file hosts.
+#
+# Every tweak is pinned to an exact commit (see "Pinned sources" below).
+# To update a tweak: review its new code, then change its commit hash here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ipa_url:
+        description: "URL to the decrypted YouTube IPA"
+        required: true
+        type: string
+
+      enable_sponsorblock:
+        description: "iSponsorBlock - skip sponsored segments"
+        type: boolean
+        default: true
+      enable_youpip:
+        description: "YouPiP - Picture in Picture"
+        type: boolean
+        default: true
+      hide_shorts_tab:
+        description: "TabCleaner - remove the Shorts tab"
+        type: boolean
+        default: true
+      hide_upload_tab:
+        description: "TabCleaner - remove the '+' (upload) tab"
+        type: boolean
+        default: false
+      enable_unshorts:
+        description: "YTUnShorts - remove Shorts shelves from feeds"
+        type: boolean
+        default: true
+      enable_noytpremium:
+        description: "NoYTPremium - remove 'Get Premium' popups"
+        type: boolean
+        default: true
+      enable_gonerino:
+        description: "Gonerino - block channels/words in feeds"
+        type: boolean
+        default: false
+      enable_ryd:
+        description: "Return YouTube Dislikes"
+        type: boolean
+        default: false
+      enable_ytuhd:
+        description: "YTUHD - 1440p/4K (software decoding on older iPhones = heat)"
+        type: boolean
+        default: false
+      enable_yq:
+        description: "YouQuality - quality button on the player"
+        type: boolean
+        default: false
+      enable_ycq:
+        description: "YouChooseQuality - default video quality"
+        type: boolean
+        default: false
+      enable_youspeed:
+        description: "YouSpeed - speed button on the player"
+        type: boolean
+        default: false
+      enable_youloop:
+        description: "YouLoop - loop button on the player"
+        type: boolean
+        default: false
+      enable_youmute:
+        description: "YouMute - mute button on the player"
+        type: boolean
+        default: false
+      enable_demc:
+        description: "DontEatMyContent - keep video clear of the notch"
+        type: boolean
+        default: false
+
+      display_name:
+        description: "App name"
+        default: "YouTube"
+        type: string
+      bundle_id:
+        description: "Bundle ID"
+        default: "com.google.ios.youtube"
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # ---- Pinned sources (commit reviewed on 2026-11-04) ----
+  THEOS_REF: 9bc73406cf80b711ef4d02c15ff1dedc4478a275
+  SDKS_REF: 0222fd5413cf4b9af096f37b4621afa2688572f7
+  YOUTUBEHEADER_REF: 4b9977e2b243fcb143395e0a20d975a32eaa93e0
+  PSHEADER_REF: 7f56cc61f11205864bc2305641ecb281be8c0ace
+  CYAN_REF: 740d3716dcd98c20c000f12cdb88f1f0b2a533a4
+
+  YOUTUBEX_REF: 9a8e60a488325e37cf69e0611811889ab37cd3d3
+  YTABGOODIES_REF: 77556588905b835ba206d8df10a7258e0260528a
+  YOUGROUPSETTINGS_REF: 4697fb3e277303e0d611362982d9ddaea0424485
+  YTVIDEOOVERLAY_REF: f5bfd3f0cc7b3d18ea45e505da6c3120a26b89d2
+  ISPONSORBLOCK_REF: 28a9a0a1cc16c3f4c4b153dd67a5cca368382bbc
+  YOUPIP_REF: 034477a48c8ec18736e26d054106df88c1f0deb3
+  YTUNSHORTS_REF: 2efdab44c3cbcef7cfd5ca1d282f1860d3efd8cf
+  NOYTPREMIUM_REF: 0ae2f1768f0a67bf0b91cd912e5f81ac9b8066ed
+  GONERINO_REF: 91a15251f2a956a1cb1d99fe42fe1a2791e79fa3
+  RYD_REF: 3347d770d699653fae6597bfe3b36ee896fbc9e8
+  YTUHD_REF: cf266c2a351eb4f97e6bb2fb129509c501bdf207
+  YOUQUALITY_REF: 3199d594bbec58f419107fc7b1d9c28f209bcd04
+  YOUCHOOSEQUALITY_REF: 700ed1c019346d4bf03b4441c52bbb49dc92b575
+  YOUSPEED_REF: f3de005a8a4c9356699395510799221a4c42d72b
+  YOULOOP_REF: 43c39ccfba454e0f602c39524b173a97f5cd774a
+  YOUMUTE_REF: d2cf6cce286fc9dd6c1ae6e24e5f1b7961564169
+  DEMC_REF: 176adb9a163741c3cf74d9ad66d55e6643589b30
+
+jobs:
+  build:
+    name: Build tweaks and IPA
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v6
+
+      - name: Hide IPA URL from logs
+        run: echo "::add-mask::${{ inputs.ipa_url }}"
+
+      - name: Install build tools
+        run: |
+          brew install make ldid dpkg
+          echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
+          echo "THEOS=${{ github.workspace }}/theos" >> "$GITHUB_ENV"
+
+      - name: Cache Theos
+        id: theos-cache
+        uses: actions/cache@v5
+        with:
+          path: theos/
+          key: theos-${{ env.THEOS_REF }}-sdk-${{ env.SDKS_REF }}
+
+      - name: Setup Theos
+        if: steps.theos-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v6
+        with:
+          repository: theos/theos
+          ref: ${{ env.THEOS_REF }}
+          path: theos
+          submodules: recursive
+
+      - name: Download iOS SDK
+        if: steps.theos-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --quiet -n --filter=tree:0 https://github.com/theos/sdks/ sdks
+          cd sdks
+          git sparse-checkout set --no-cone iPhoneOS16.5.sdk
+          git checkout --quiet "$SDKS_REF"
+          mv iPhoneOS16.5.sdk "$THEOS/sdks/"
+
+      - name: Define fetch helper
+        run: |
+          # fetch <dir> <owner/repo> <commit>: clone one exact commit (+ its submodules)
+          cat > "$RUNNER_TEMP/fetch.sh" <<'EOF'
+          set -euo pipefail
+          dir="$1"; repo="$2"; ref="$3"
+          rm -rf "$dir"
+          git init --quiet "$dir"
+          git -C "$dir" remote add origin "https://github.com/$repo.git"
+          git -C "$dir" fetch --quiet --depth=1 origin "$ref"
+          git -C "$dir" checkout --quiet FETCH_HEAD
+          git -C "$dir" submodule update --quiet --init --recursive --depth=1
+          echo "$repo @ $(git -C "$dir" rev-parse HEAD)"
+          EOF
+          echo "FETCH=bash $RUNNER_TEMP/fetch.sh" >> "$GITHUB_ENV"
+
+      - name: Install headers (YouTubeHeader, PSHeader)
+        run: |
+          $FETCH "$THEOS/include/YouTubeHeader" PoomSmart/YouTubeHeader "$YOUTUBEHEADER_REF"
+          $FETCH "$THEOS/include/PSHeader" PoomSmart/PSHeader "$PSHEADER_REF"
+
+      - name: Fetch tweak sources
+        run: |
+          mkdir -p src && cd src
+          # Always included
+          $FETCH YouTube-X        PoomSmart/YouTube-X        "$YOUTUBEX_REF"
+          $FETCH YTABGoodies      PoomSmart/YTABGoodies      "$YTABGOODIES_REF"
+          $FETCH YouGroupSettings PoomSmart/YouGroupSettings "$YOUGROUPSETTINGS_REF"
+          # Optional
+          if ${{ inputs.enable_youpip || inputs.enable_yq || inputs.enable_youspeed || inputs.enable_youloop || inputs.enable_youmute }}; then
+            $FETCH YTVideoOverlay PoomSmart/YTVideoOverlay "$YTVIDEOOVERLAY_REF"
+          fi
+          if ${{ inputs.enable_sponsorblock }}; then $FETCH iSponsorBlock Galactic-Dev/iSponsorBlock "$ISPONSORBLOCK_REF"; fi
+          if ${{ inputs.enable_youpip }};      then $FETCH YouPiP PoomSmart/YouPiP "$YOUPIP_REF"; fi
+          if ${{ inputs.enable_unshorts }};    then $FETCH YTUnShorts PoomSmart/YTUnShorts "$YTUNSHORTS_REF"; fi
+          if ${{ inputs.enable_noytpremium }}; then $FETCH NoYTPremium PoomSmart/NoYTPremium "$NOYTPREMIUM_REF"; fi
+          if ${{ inputs.enable_gonerino }};    then $FETCH Gonerino castdrian/Gonerino "$GONERINO_REF"; fi
+          if ${{ inputs.enable_ryd }};         then $FETCH Return-YouTube-Dislikes PoomSmart/Return-YouTube-Dislikes "$RYD_REF"; fi
+          if ${{ inputs.enable_ytuhd }};       then $FETCH YTUHD Tonwalter888/YTUHD "$YTUHD_REF"; fi
+          if ${{ inputs.enable_yq }};          then $FETCH YouQuality PoomSmart/YouQuality "$YOUQUALITY_REF"; fi
+          if ${{ inputs.enable_ycq }};         then $FETCH YouChooseQuality PoomSmart/YouChooseQuality "$YOUCHOOSEQUALITY_REF"; fi
+          if ${{ inputs.enable_youspeed }};    then $FETCH YouSpeed PoomSmart/YouSpeed "$YOUSPEED_REF"; fi
+          if ${{ inputs.enable_youloop }};     then $FETCH YouLoop bhackel/YouLoop "$YOULOOP_REF"; fi
+          if ${{ inputs.enable_youmute }};     then $FETCH YouMute PoomSmart/YouMute "$YOUMUTE_REF"; fi
+          if ${{ inputs.enable_demc }};        then $FETCH DontEatMyContent therealFoxster/DontEatMyContent "$DEMC_REF"; fi
+          # Our own tweak, from this repository
+          if ${{ inputs.hide_shorts_tab || inputs.hide_upload_tab }}; then
+            cp -R ../tweaks/TabCleaner TabCleaner
+          fi
+
+      - name: Patch iSponsorBlock for sideloading
+        if: ${{ inputs.enable_sponsorblock }}
+        run: |
+          # iSponsorBlock links the jailbreak-only colour picker (Alderis/libcolorpicker),
+          # but only looks it up at runtime (objc_getClass). Dropping the link lets it build
+          # and run; only the segment-colour picker in its settings will be inactive.
+          perl -pi -e 's/^\s*iSponsorBlock_LIBRARIES\s*=.*$//' src/iSponsorBlock/Makefile
+
+      - name: Expose DontEatMyContent headers
+        if: ${{ inputs.enable_demc }}
+        run: |
+          # DEMC includes <YTHeaders/...>; use its own pinned submodule for that.
+          rm -rf "$THEOS/include/YTHeaders"
+          cp -R src/DontEatMyContent/YTHeaders "$THEOS/include/YTHeaders"
+
+      - name: Setup Go (needed by Gonerino's build script)
+        if: ${{ inputs.enable_gonerino }}
+        uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+
+      - name: Build tweaks
+        run: |
+          set -euo pipefail
+          mkdir -p debs
+          cd src
+          for dir in */; do
+            dir="${dir%/}"
+            extra=""
+            if [ "$dir" = "TabCleaner" ]; then
+              extra="HIDE_SHORTS_TAB=${{ inputs.hide_shorts_tab && '1' || '0' }} HIDE_UPLOAD_TAB=${{ inputs.hide_upload_tab && '1' || '0' }}"
+            fi
+            echo "::group::Build $dir"
+            make -C "$dir" clean package DEBUG=0 FINALPACKAGE=1 $extra
+            mv "$dir"/packages/*.deb "../debs/$dir.deb"
+            echo "::endgroup::"
+          done
+          ls -la ../debs
+
+      - name: Install cyan
+        run: pipx install --force "https://github.com/asdfzxcvbn/pyzule-rw/archive/${CYAN_REF}.zip"
+
+      - name: Download and validate IPA
+        run: |
+          wget "${{ inputs.ipa_url }}" --no-verbose -O youtube.ipa
+          file_type=$(file --mime-type -b youtube.ipa)
+          if [[ "$file_type" != "application/x-ios-app" && "$file_type" != "application/zip" ]]; then
+            echo "::error::The downloaded file is not a valid IPA (detected: $file_type)."
+            exit 1
+          fi
+          unzip -q youtube.ipa 'Payload/YouTube.app/Info.plist' -d ytextracted
+          yt_version=$(plutil -extract CFBundleVersion raw ytextracted/Payload/YouTube.app/Info.plist)
+          echo "YT_VERSION=$yt_version" >> "$GITHUB_ENV"
+          echo "YouTube version: $yt_version"
+
+      - name: Inject tweaks into IPA
+        run: |
+          out="YouTubeOSS_${YT_VERSION}_run${{ github.run_number }}.ipa"
+          cyan -i youtube.ipa -o "$out" -uwe -f debs/*.deb -n "${{ inputs.display_name }}" -b "${{ inputs.bundle_id }}"
+          echo "OUT_IPA=$out" >> "$GITHUB_ENV"
+
+      - name: List included tweaks
+        run: |
+          {
+            echo "Open-source build for YouTube ${YT_VERSION}."
+            echo
+            echo "Included tweaks:"
+            for f in debs/*.deb; do echo "- $(basename "$f" .deb)"; done
+          } > release_notes.md
+          cat release_notes.md
+
+      - name: Upload as draft release (visible only to you)
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: oss-${{ env.YT_VERSION }}-run${{ github.run_number }}
+          name: YouTube OSS ${{ env.YT_VERSION }} (run ${{ github.run_number }})
+          files: ${{ env.OUT_IPA }}
+          body_path: release_notes.md
+          draft: true
+
+      - name: Done
+        run: echo "::notice::Build finished. Find the IPA in the draft release at https://github.com/${{ github.repository }}/releases"
