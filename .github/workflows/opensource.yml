@@ -22,14 +22,18 @@ on:
         description: "YouPiP - Picture in Picture"
         type: boolean
         default: true
-      hide_shorts_tab:
-        description: "TabCleaner - remove the Shorts tab"
-        type: boolean
-        default: true
-      hide_upload_tab:
-        description: "TabCleaner - remove the '+' (upload) tab"
-        type: boolean
-        default: false
+      tab_order:
+        description: "Barre du bas: onglets gardés, dans l'ordre (home,shorts,upload,subscriptions,you,explore). Vide = ne rien changer"
+        type: string
+        default: "home,subscriptions,you"
+      landscape_side:
+        description: "Paysage bloqué d'un seul côté"
+        type: choice
+        options:
+          - "off"
+          - "camera-right"
+          - "camera-left"
+        default: "camera-right"
       enable_unshorts:
         description: "YTUnShorts - remove Shorts shelves from feeds"
         type: boolean
@@ -205,9 +209,12 @@ jobs:
           if ${{ inputs.enable_youmute }};     then $FETCH YouMute PoomSmart/YouMute "$YOUMUTE_REF"; fi
           if ${{ inputs.enable_demc }};        then $FETCH DontEatMyContent therealFoxster/DontEatMyContent "$DEMC_REF"; fi
           # Our own tweak, from this repository
-          if ${{ inputs.hide_shorts_tab || inputs.hide_upload_tab }}; then
-            cp -R ../tweaks/TabCleaner TabCleaner
+          if [ -n "$TAB_ORDER" ] || [ "$LANDSCAPE_SIDE" != "off" ]; then
+            cp -R ../tweaks/PersoTube PersoTube
           fi
+        env:
+          TAB_ORDER: ${{ inputs.tab_order }}
+          LANDSCAPE_SIDE: ${{ inputs.landscape_side }}
 
       - name: Patch iSponsorBlock for sideloading
         if: ${{ inputs.enable_sponsorblock }}
@@ -238,15 +245,28 @@ jobs:
           for dir in */; do
             dir="${dir%/}"
             extra=""
-            if [ "$dir" = "TabCleaner" ]; then
-              extra="HIDE_SHORTS_TAB=${{ inputs.hide_shorts_tab && '1' || '0' }} HIDE_UPLOAD_TAB=${{ inputs.hide_upload_tab && '1' || '0' }}"
+            extra=()
+            if [ "$dir" = "PersoTube" ]; then
+              tabs=$(echo "$TAB_ORDER" | tr -d ' ' | tr 'A-Z' 'a-z')
+              if ! [[ "$tabs" =~ ^[a-z,]*$ ]]; then
+                echo "::error::tab_order must be a comma-separated list like home,subscriptions,you"; exit 1
+              fi
+              case "$LANDSCAPE_SIDE" in
+                camera-right) side=1 ;;
+                camera-left)  side=2 ;;
+                *)            side=0 ;;
+              esac
+              extra=("TAB_ORDER=$tabs" "LANDSCAPE_SIDE=$side")
             fi
             echo "::group::Build $dir"
-            make -C "$dir" clean package DEBUG=0 FINALPACKAGE=1 $extra
+            make -C "$dir" clean package DEBUG=0 FINALPACKAGE=1 ${extra[@]+"${extra[@]}"}
             mv "$dir"/packages/*.deb "../debs/$dir.deb"
             echo "::endgroup::"
           done
           ls -la ../debs
+        env:
+          TAB_ORDER: ${{ inputs.tab_order }}
+          LANDSCAPE_SIDE: ${{ inputs.landscape_side }}
 
       - name: Install cyan
         run: pipx install --force "https://github.com/asdfzxcvbn/pyzule-rw/archive/${CYAN_REF}.zip"

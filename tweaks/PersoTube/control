@@ -1,8 +1,8 @@
-Package: com.local.tabcleaner
-Name: TabCleaner
+Package: com.local.persotube
+Name: PersoTube
 Version: 1.0.0
 Architecture: iphoneos-arm
-Description: Removes the Shorts and/or upload tabs from the YouTube bottom bar.
+Description: Personal YouTube tweaks: bottom bar tabs order, one-side landscape lock.
 Maintainer: local
 Author: local
 Section: Tweaks
